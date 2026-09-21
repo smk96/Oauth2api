@@ -1,0 +1,23 @@
+{
+  "name": "ms-oauth2api",
+  "version": "2.1.0-vps-vercel",
+  "private": true,
+  "scripts": {
+    "start": "node vps.js",
+    "dev": "node vps.js",
+    "vercel:dev": "vercel dev"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "dotenv": "^16.4.7",
+    "express": "^4.18.3",
+    "imap": "^0.8.19",
+    "mailin": "^3.0.4",
+    "mailparser": "^3.6.5",
+    "node-imap": "^0.9.6",
+    "nodemailer": "^6.9.16"
+  }
+}
