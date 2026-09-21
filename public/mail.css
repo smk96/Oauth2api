@@ -966,37 +966,6 @@ input[type="checkbox"] {
   border: 0;
 }
 
-.ai-status {
-  color: var(--weak);
-  margin-bottom: 10px;
-}
-
-.ai-thinking {
-  display: none;
-  max-height: 120px;
-  overflow: auto;
-  padding: 12px;
-  border: 1px dashed var(--line);
-  background: #fafafa;
-  color: var(--muted);
-  white-space: pre-wrap;
-  margin-bottom: 12px;
-}
-
-.ai-thinking.active {
-  display: block;
-}
-
-.ai-summary {
-  min-height: 120px;
-  padding: 14px;
-  border-radius: var(--radius);
-  background: var(--primary-soft);
-  color: #1f4f7a;
-  line-height: 1.7;
-  white-space: pre-wrap;
-}
-
 .loading-overlay {
   display: none;
   position: fixed;
@@ -1401,8 +1370,7 @@ input[type="checkbox"] {
     padding: 0 10px;
   }
 
-  .mail-modal .modal,
-  .ai-modal .modal {
+  .mail-modal .modal {
     height: calc(100vh - 24px);
   }
 

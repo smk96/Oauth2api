@@ -25,11 +25,8 @@
 | `PORT` | 可选 | 不需要 | VPS 监听端口，默认 `3000` |
 | `DATA_DIR` | 可选 | 不需要 | VPS SQLite 数据目录，默认 `./data` |
 | `DB_PATH` | 可选 | 不需要 | VPS SQLite 数据库文件，默认 `./data/mail.db` |
-| `PASSWORD` | 可选 | 可选 | 保护取信、刷新 Token、AI 接口 |
+| `PASSWORD` | 可选 | 可选 | 保护取信、刷新 Token 接口 |
 | `SEND_PASSWORD` | 可选 | 可选 | 保护 `/api/send-mail` |
-| `AI_API_KEY` | 可选 | 可选 | OpenAI 兼容接口 Key |
-| `AI_API_URL` | 可选 | 可选 | OpenAI 兼容接口地址，不带 `/v1/chat/completions` |
-| `AI_MODEL` | 可选 | 可选 | AI 模型名 |
 
 VPS 使用 `.env` 文件；Vercel 在 Project Settings -> Environment Variables 配置。
 
@@ -60,14 +57,16 @@ DB_PATH=./data/mail.db
 
 Vercel 没有持久磁盘，数据库接口会禁用，前端会自动回退到浏览器 `localStorage`。
 
-`/mail.html` 页面默认有前端访问门禁：
+VPS 和 Vercel 部署的 `/mail.html` 页面**默认开启前端访问门禁**：
 
 ```text
-账号：adinm
-密码：adinm123
+账号：admin
+密码：admin123
 ```
 
-登录状态保存在 `sessionStorage.mailAccessGranted`，关闭浏览器后需要重新登录。
+登录输入框不会预填账号或密码。登录状态保存在 `sessionStorage.mailAccessGranted`，关闭浏览器后需要重新登录。
+
+登录后点击页面左上角的“邮箱管理”，可修改访问用户名和密码。自定义凭据保存在当前浏览器的 `localStorage`。检测到旧版默认凭据 `adinm / adinm123` 时，页面会自动迁移到新的默认凭据。
 
 注意：这是前端门禁，不等同于服务端鉴权。VPS 生产环境建议额外配置 Nginx Basic Auth、Cloudflare Access 或其它服务端访问控制。
 
@@ -97,9 +96,6 @@ HOST=0.0.0.0
 PORT=3000
 PASSWORD=your-password
 SEND_PASSWORD=your-send-password
-AI_API_KEY=your-api-key
-AI_API_URL=https://api.example.com
-AI_MODEL=your-model-name
 ```
 
 ### 3. 启动
@@ -191,12 +187,9 @@ Vercel 会自动识别：
 ```text
 PASSWORD
 SEND_PASSWORD
-AI_API_KEY
-AI_API_URL
-AI_MODEL
 ```
 
-没有使用 AI 或发信功能时，对应变量可以不填。
+没有使用发信功能时，`SEND_PASSWORD` 可以不填。
 
 ### 3. 部署后检查
 
@@ -236,7 +229,6 @@ npm run vercel:dev
 | `/api/mail-new` | Express 挂载 API | Vercel Function |
 | `/api/refresh-token` | Express 挂载 API | Vercel Function |
 | `/api/send-mail` | Express 挂载 API | Vercel Function |
-| `/api/ai` | Express 挂载 API | Vercel Function |
 | `/healthz` | VPS 健康检查 | 不适用 |
 
 ## 两分钟自检

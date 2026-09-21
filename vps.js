@@ -28,7 +28,6 @@ app.get('/healthz', (req, res) => {
 });
 
 const routes = [
-    'ai',
     'mail-all',
     'mail-new',
     'process-inbox',

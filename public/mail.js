@@ -7,14 +7,14 @@
     PASSWORD_KEY: 'password',
     MAIL_LIMIT_KEY: 'mailLimit',
     ACCESS_SESSION_KEY: 'mailAccessGranted',
+    ACCESS_SESSION_VERSION: '2',
     ACCESS_USERNAME_KEY: 'mailAccessUsername',
     ACCESS_PASSWORD_KEY: 'mailAccessPassword',
-    ACCESS_DEFAULT_USERNAME: 'adinm',
-    ACCESS_DEFAULT_PASSWORD: 'adinm123',
+    ACCESS_DEFAULT_USERNAME: 'admin',
+    ACCESS_DEFAULT_PASSWORD: 'admin123',
     DEFAULT_GROUP: '默认分组',
     MAIL_ITEMS_PER_PAGE: 10,
     API_BASE: '/api/mail-all',
-    AI_API: '/api/ai',
     REFRESH_TOKEN_API: '/api/refresh-token',
     STORE_STATE_API: '/api/store-state',
     STORE_EMAILS_API: '/api/store-emails',
@@ -42,9 +42,6 @@
     currentMailAccount: null,
     currentMailbox: 'INBOX'
   }
-
-  let aiController = null
-  let aiAccumulatedContent = ''
 
   const $ = (sel, ctx = document) => ctx.querySelector(sel)
   const $$ = (sel, ctx = document) => Array.from(ctx.querySelectorAll(sel))
@@ -108,6 +105,16 @@
   const setPassword = (pwd) => localStorage.setItem(CONFIG.PASSWORD_KEY, pwd)
   const getAccessUsername = () => localStorage.getItem(CONFIG.ACCESS_USERNAME_KEY) || CONFIG.ACCESS_DEFAULT_USERNAME
   const getAccessPassword = () => localStorage.getItem(CONFIG.ACCESS_PASSWORD_KEY) || CONFIG.ACCESS_DEFAULT_PASSWORD
+  const migrateLegacyAccessCredentials = () => {
+    const username = localStorage.getItem(CONFIG.ACCESS_USERNAME_KEY)
+    const password = localStorage.getItem(CONFIG.ACCESS_PASSWORD_KEY)
+
+    if (username === 'adinm' && password === 'adinm123') {
+      localStorage.removeItem(CONFIG.ACCESS_USERNAME_KEY)
+      localStorage.removeItem(CONFIG.ACCESS_PASSWORD_KEY)
+      sessionStorage.removeItem(CONFIG.ACCESS_SESSION_KEY)
+    }
+  }
   const setAccessCredentials = (username, password) => {
     localStorage.setItem(CONFIG.ACCESS_USERNAME_KEY, username || CONFIG.ACCESS_DEFAULT_USERNAME)
     if (password) localStorage.setItem(CONFIG.ACCESS_PASSWORD_KEY, password)
@@ -121,10 +128,10 @@
     showToast.timer = setTimeout(() => { toast.style.display = 'none' }, 2200)
   }
 
-  const isAccessGranted = () => sessionStorage.getItem(CONFIG.ACCESS_SESSION_KEY) === '1'
+  const isAccessGranted = () => sessionStorage.getItem(CONFIG.ACCESS_SESSION_KEY) === CONFIG.ACCESS_SESSION_VERSION
 
   const unlockAccess = () => {
-    sessionStorage.setItem(CONFIG.ACCESS_SESSION_KEY, '1')
+    sessionStorage.setItem(CONFIG.ACCESS_SESSION_KEY, CONFIG.ACCESS_SESSION_VERSION)
     document.body.classList.remove('access-locked')
   }
 
@@ -187,6 +194,19 @@
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;')
+
+  const formatDateTime = (value) => {
+    if (!value) return '-'
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return String(value)
+
+    const pad = number => String(number).padStart(2, '0')
+    return [
+      date.getFullYear(),
+      pad(date.getMonth() + 1),
+      pad(date.getDate())
+    ].join('-') + ` ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+  }
 
   const copyText = async (value, label = '内容') => {
     const text = String(value || '')
@@ -315,13 +335,13 @@
             <button class="copy-btn" data-action="copy-email" title="复制邮箱">▣</button>
           </div>
         </td>
-        <td class="tag-cell"><span class="tag">${escapeHtml(item.group)}</span></td>
         <td title="${escapeHtml(item.password)}">
           <div class="copy-cell">
             <span>${escapeHtml(item.password || '-')}</span>
             <button class="copy-btn" data-action="copy-password" title="复制密码">▣</button>
           </div>
         </td>
+        <td class="tag-cell"><span class="tag">${escapeHtml(item.group)}</span></td>
         <td title="${escapeHtml(item.note)}">${item.note ? escapeHtml(item.note) : '<span class="note-empty">暂无备注</span>'}</td>
         <td>
           <div class="actions">
@@ -694,11 +714,10 @@
       <tr data-index="${start + i}">
         <td title="${escapeHtml(item.send)}">${escapeHtml(item.send)}</td>
         <td title="${escapeHtml(item.subject)}">${escapeHtml(item.subject || '(无主题)')}</td>
-        <td title="${escapeHtml(item.date)}">${escapeHtml(item.date || '-')}</td>
+        <td title="${escapeHtml(item.date)}">${escapeHtml(formatDateTime(item.date))}</td>
         <td>
           <div class="actions">
             <button class="link-btn" data-action="view">查看</button>
-            <button class="link-btn" data-action="ai">AI 解读</button>
           </div>
         </td>
       </tr>
@@ -724,7 +743,7 @@
     if (!item) return
     $('#mail-modal-title').textContent = item.subject || '(无主题)'
     $('#mail-modal-sender').textContent = item.send || '-'
-    $('#mail-modal-date').textContent = item.date || '-'
+    $('#mail-modal-date').textContent = formatDateTime(item.date)
     const content = $('#mail-modal-content')
     content.replaceChildren()
     if (item.html) {
@@ -740,76 +759,6 @@
       content.appendChild(pre)
     }
     openModal('mail-modal')
-  }
-
-  const setAiStatus = (message) => { $('#ai-status').textContent = message }
-  const setAiSummary = (content, append = false) => {
-    const summary = $('#ai-summary')
-    aiAccumulatedContent = append ? aiAccumulatedContent + content : content
-    summary.innerHTML = window.marked ? marked.parse(aiAccumulatedContent) : escapeHtml(aiAccumulatedContent)
-    summary.scrollTop = summary.scrollHeight
-  }
-  const appendAiThinking = (content) => {
-    const thinking = $('#ai-thinking')
-    thinking.classList.add('active')
-    thinking.textContent += content
-    thinking.scrollTop = thinking.scrollHeight
-  }
-
-  const analyzeMailWithAI = async (index) => {
-    const item = state.mailData[index]
-    if (!item) return
-    openModal('ai-modal')
-    $('#ai-thinking').classList.remove('active')
-    $('#ai-thinking').textContent = ''
-    setAiStatus('正在连接 AI 解读服务...')
-    setAiSummary('准备生成摘要...')
-
-    if (aiController) aiController.abort()
-    aiController = new AbortController()
-
-    const prompt = `请分析以下邮件内容，提取关键消息并用中文总结。\n发件人：${item.send}\n主题：${item.subject}\n日期：${item.date}\n内容：${item.text || item.html || '(无内容)'}`
-
-    try {
-      const response = await fetch(CONFIG.AI_API, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [{ role: 'user', content: prompt }], password: getPassword() }),
-        signal: aiController.signal
-      })
-
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}))
-        throw new Error(response.status === 401 ? AUTH_ERROR_MESSAGE : (err.error || `请求失败: ${response.status}`))
-      }
-
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
-      aiAccumulatedContent = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop()
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue
-          const data = line.slice(6)
-          if (data === '[DONE]') continue
-          try {
-            const parsed = JSON.parse(data)
-            const delta = parsed.choices?.[0]?.delta
-            if (delta?.reasoning) appendAiThinking(delta.reasoning)
-            if (delta?.content) setAiSummary(delta.content, true)
-          } catch (e) {}
-        }
-      }
-      setAiStatus('解读完成')
-    } catch (err) {
-      setAiSummary(err.name === 'AbortError' ? '已停止' : `错误：${err.message}`)
-    }
   }
 
   const bindEvents = () => {
@@ -987,18 +936,12 @@
       if (!btn) return
       const index = Number(btn.closest('tr').dataset.index)
       if (btn.dataset.action === 'view') viewMailDetail(index)
-      if (btn.dataset.action === 'ai') analyzeMailWithAI(index)
     })
     $('#mail-pagination-btns').addEventListener('click', e => {
       const btn = e.target.closest('button[data-page]')
       if (!btn || btn.disabled) return
       state.currentMailPage = Number(btn.dataset.page)
       renderMailTable()
-    })
-
-    $('#ai-close').addEventListener('click', () => {
-      if (aiController) aiController.abort()
-      closeAllModals()
     })
 
     $$('.modal-overlay').forEach(overlay => {
@@ -1027,6 +970,7 @@
   }
 
   const init = async () => {
+    migrateLegacyAccessCredentials()
     initAccessGate()
     await loadStoreState()
     normalizeStorage()

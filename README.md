@@ -10,7 +10,6 @@
 - 邮箱分组管理
 - 当前分组导出
 - 邮箱和密码一键复制
-- AI 邮件解读代理接口
 - VPS 常驻服务和 Vercel Serverless Functions 双兼容
 
 ## 快速启动
@@ -50,11 +49,8 @@ npm run vercel:dev
 | --- | --- |
 | `HOST` | VPS 监听地址，默认 `0.0.0.0` |
 | `PORT` | VPS 监听端口，默认 `3000` |
-| `PASSWORD` | 接口访问密码，保护取信、刷新 Token、AI 接口 |
+| `PASSWORD` | 接口访问密码，保护取信、刷新 Token 接口 |
 | `SEND_PASSWORD` | 发信接口密码，保护 `/api/send-mail` |
-| `AI_API_KEY` | OpenAI 兼容接口 Key |
-| `AI_API_URL` | OpenAI 兼容接口地址 |
-| `AI_MODEL` | AI 模型名 |
 
 VPS 使用 `.env`，Vercel 在 Project Settings -> Environment Variables 配置。
 
@@ -87,16 +83,18 @@ Vercel 没有持久磁盘，`/mail.html` 会自动回退到浏览器 `localStora
 
 旧版本浏览器本地已有邮箱数据时，VPS 数据库为空会自动迁移一次到 SQLite。
 
-## 页面访问密码
+## `/mail.html` 前端访问门禁
 
-`/mail.html` 默认开启前端访问门禁：
+VPS 和 Vercel 部署的 `/mail.html` **默认开启前端访问门禁**：
 
 ```text
 账号：admin
 密码：admin123
 ```
 
-登录状态保存在当前浏览器会话的 `sessionStorage`，关闭浏览器后需要重新登录。
+登录输入框不会预填账号或密码。登录状态保存在当前浏览器会话的 `sessionStorage`，关闭浏览器后需要重新登录。
+
+登录后可点击页面左上角的“邮箱管理”修改访问账号和密码。自定义凭据存储在当前浏览器的 `localStorage`；检测到旧版默认凭据 `adinm / adinm123` 时会自动迁移到新默认凭据。
 
 这是前端门禁，适合防止普通误访问；如果要强安全，VPS 建议再加 Nginx Basic Auth 或服务器侧鉴权。
 
@@ -132,7 +130,6 @@ Vercel 没有持久磁盘，`/mail.html` 会自动回退到浏览器 `localStora
 | `/api/send-mail` | GET / POST | OAuth2 SMTP 发信 |
 | `/api/process-inbox` | GET / POST | 清空收件箱 |
 | `/api/process-junk` | GET / POST | 清空垃圾箱 |
-| `/api/ai` | POST | OpenAI 兼容 AI 解读代理 |
 
 ## VPS 文件
 
