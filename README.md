@@ -92,8 +92,8 @@ Vercel 没有持久磁盘，`/mail.html` 会自动回退到浏览器 `localStora
 `/mail.html` 默认开启前端访问门禁：
 
 ```text
-账号：adinm
-密码：adinm123
+账号：admin
+密码：admin123
 ```
 
 登录状态保存在当前浏览器会话的 `sessionStorage`，关闭浏览器后需要重新登录。
