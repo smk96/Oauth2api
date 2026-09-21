@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>邮箱管理</title>
+  <link rel="stylesheet" href="/mail.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/11.2.0/marked.min.js"></script>
+</head>
+<body class="access-locked">
+  <div class="loading-overlay" id="loading-overlay">
+    <div class="spinner"></div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <div class="access-gate" id="access-gate">
+    <form class="access-card" id="access-form" autocomplete="off">
+      <div class="access-icon">✉</div>
+      <h1>邮箱管理</h1>
+      <p>请输入访问账号和密码</p>
+      <label>
+        <span>账号</span>
+        <input type="text" id="access-username" autocomplete="off" placeholder="请输入账号">
+      </label>
+      <label>
+        <span>密码</span>
+        <input type="password" id="access-password" autocomplete="new-password" placeholder="请输入密码">
+      </label>
+      <button class="btn btn-primary access-submit" type="submit">进入管理</button>
+      <div class="access-error" id="access-error"></div>
+    </form>
+  </div>
+
+  <div class="app-shell">
+    <aside class="sidebar">
+      <button class="brand brand-action" id="access-settings-btn" type="button" title="修改登录账号和密码">
+        <div class="brand-icon">✉</div>
+        <div>
+          <h1>邮箱管理</h1>
+          <p>高效管理您的邮箱账户</p>
+        </div>
+      </button>
+
+      <section class="side-section">
+        <h2>导入数据</h2>
+        <label class="field">
+          <span>导入到分组</span>
+          <select id="import-group"></select>
+        </label>
+
+        <label class="field">
+          <span>分隔符设置</span>
+          <input type="text" id="import-delimiter" value="----" placeholder="----">
+        </label>
+
+        <div class="upload-box" id="upload-box">
+          <div class="upload-icon">☁</div>
+          <p>拖拽或点击上传</p>
+          <small>格式：邮箱----密码----Client ID----RefreshToken；也支持邮箱----密码----RefreshToken----Client ID</small>
+          <input type="file" id="import-file" accept=".txt,.csv">
+        </div>
+
+        <button class="btn btn-primary-soft sidebar-btn" id="paste-import-btn">粘贴文本导入</button>
+      </section>
+
+      <section class="side-section">
+        <h2>数据管理</h2>
+        <label class="field">
+          <span>默认获取数量</span>
+          <select id="mail-limit">
+            <option value="1">最近 1 条</option>
+            <option value="2">最近 2 条</option>
+            <option value="5">最近 5 条</option>
+            <option value="10">最近 10 条</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>接口密码</span>
+          <input type="password" id="toolbar-password" placeholder="访问密码">
+        </label>
+
+        <button class="btn btn-danger-soft sidebar-btn" id="clear-all-btn">清空全部邮箱</button>
+        <button class="btn btn-primary-soft sidebar-btn" id="export-btn">导出当前分组</button>
+      </section>
+    </aside>
+
+    <main class="workspace">
+      <section id="account-section" class="section active">
+        <header class="topbar">
+          <div class="search-control">
+            <span>⌕</span>
+            <input id="search-input" type="text" placeholder="搜索邮箱地址...">
+          </div>
+
+          <div class="topbar-controls">
+            <label class="inline-field">
+              <span>当前分组</span>
+              <select id="group-filter"></select>
+            </label>
+            <button class="btn" id="group-manage-btn">分组管理</button>
+            <span class="record-count" id="record-count">0 条记录</span>
+            <button class="btn btn-primary-soft" id="batch-refresh-token-btn">批量刷新 Token</button>
+            <button class="btn btn-primary-soft" id="top-export-btn">导出 TXT</button>
+          </div>
+
+          <div class="batch-actions">
+            <button class="btn btn-primary" id="batch-move-btn" disabled>批量移动</button>
+            <button class="btn btn-danger" id="batch-delete-btn" disabled>批量删除</button>
+          </div>
+        </header>
+
+        <div class="table-card">
+          <div class="table-wrap">
+            <table class="table" id="email-table">
+              <thead>
+                <tr>
+                  <th class="check-col"><input type="checkbox" id="select-all"></th>
+                  <th class="seq-col">序号</th>
+                  <th>邮箱地址</th>
+                  <th>分组</th>
+                  <th>密码</th>
+                  <th>备注</th>
+                  <th class="action-col">操作</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+
+          <footer class="pagination-wrap">
+            <span class="pagination-info" id="pagination-info">共 0 条</span>
+            <select class="per-page" id="per-page">
+              <option value="5">5</option>
+              <option value="10">10</option>
+              <option value="20">20</option>
+              <option value="50">50</option>
+            </select>
+            <div class="pagination" id="pagination-btns"></div>
+          </footer>
+        </div>
+      </section>
+
+      <section id="mail-section" class="section">
+        <header class="mail-header">
+          <button class="btn" id="back-btn">返回</button>
+          <div>
+            <h2 id="mail-title">邮件列表</h2>
+            <div class="mail-header-meta">
+              <span id="mail-subtitle">收件箱</span>
+              <select id="mailbox-switch" class="mailbox-switch">
+                <option value="INBOX">收件箱</option>
+                <option value="Junk">垃圾邮箱</option>
+              </select>
+            </div>
+          </div>
+        </header>
+
+        <div class="table-card">
+          <div class="table-wrap">
+            <table class="table" id="mail-table">
+              <thead>
+                <tr>
+                  <th>发件人</th>
+                  <th>主题</th>
+                  <th>日期</th>
+                  <th class="action-col">操作</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <footer class="pagination-wrap">
+            <div class="pagination" id="mail-pagination-btns"></div>
+          </footer>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal-overlay" id="paste-import-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>粘贴文本导入</h3>
+        <button class="icon-btn" data-close>×</button>
+      </div>
+      <div class="modal-body">
+        <p class="hint">每行一条，支持：邮箱----密码----Client ID----RefreshToken，也支持：邮箱----密码----RefreshToken----Client ID。只有邮箱和密码也会导入，后续可补充。</p>
+        <textarea id="paste-import-text" rows="10" placeholder="user@example.com----password----client_id----refresh_token"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-close>取消</button>
+        <button class="btn btn-primary" id="paste-import-confirm">导入</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="access-settings-modal">
+    <div class="modal modal-narrow">
+      <div class="modal-header">
+        <h3>登录设置</h3>
+        <button class="icon-btn" data-close>×</button>
+      </div>
+      <div class="modal-body">
+        <label class="field">
+          <span>登录用户名</span>
+          <input type="text" id="access-settings-username" autocomplete="off" placeholder="请输入新的用户名">
+        </label>
+        <label class="field">
+          <span>新密码</span>
+          <input type="password" id="access-settings-password" autocomplete="new-password" placeholder="留空则不修改密码">
+        </label>
+        <label class="field">
+          <span>确认新密码</span>
+          <input type="password" id="access-settings-password-confirm" autocomplete="new-password" placeholder="再次输入新密码">
+        </label>
+        <p class="hint">保存后新的账号密码立即生效，当前已登录会话不会被强制退出。</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-close>取消</button>
+        <button class="btn btn-primary" id="access-settings-save">保存设置</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay drawer-overlay" id="group-modal">
+    <aside class="group-drawer">
+      <div class="drawer-header">
+        <h3>分组管理</h3>
+        <button class="icon-btn" data-close>×</button>
+      </div>
+      <div class="drawer-body">
+        <div class="drawer-summary">
+          <div>
+            <h4>整理邮箱分组</h4>
+            <p>分组只影响邮箱归类，不会改变邮箱内容。</p>
+          </div>
+          <strong><span id="group-total-count">0</span> <small>个分组</small></strong>
+        </div>
+
+        <div class="group-create collapsed" id="group-create">
+          <button class="btn btn-primary drawer-add-btn" id="show-add-group-btn">+ 新建分组</button>
+          <div class="group-create-form">
+            <input type="text" id="new-group-name" placeholder="新分组名称">
+            <button class="btn btn-primary" id="add-group-btn">保存</button>
+          </div>
+        </div>
+
+        <h4 class="drawer-subtitle">分组列表</h4>
+        <div class="group-list" id="group-list"></div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="modal-overlay" id="rename-group-modal">
+    <div class="modal modal-narrow">
+      <div class="modal-header">
+        <h3>编辑分组</h3>
+        <button class="icon-btn" data-close>×</button>
+      </div>
+      <div class="modal-body">
+        <label class="field">
+          <span>分组名称</span>
+          <input type="text" id="rename-group-name" placeholder="分组名称">
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-close>取消</button>
+        <button class="btn btn-primary" id="rename-group-confirm">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="move-modal">
+    <div class="modal modal-narrow">
+      <div class="modal-header">
+        <h3>移动分组</h3>
+        <button class="icon-btn" data-close>×</button>
+      </div>
+      <div class="modal-body">
+        <label class="field">
+          <span>目标分组</span>
+          <select id="move-target-group"></select>
+        </label>
+        <p class="hint" id="move-count">将移动 0 个邮箱</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-close>取消</button>
+        <button class="btn btn-primary" id="move-confirm">确认移动</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="note-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>编辑备注</h3>
+        <button class="icon-btn" data-close>×</button>
+      </div>
+      <div class="modal-body">
+        <textarea id="note-text" rows="6" placeholder="输入备注"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-close>取消</button>
+        <button class="btn btn-primary" id="note-confirm">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="delete-confirm-modal">
+    <div class="modal modal-narrow">
+      <div class="modal-header">
+        <h3>确认删除</h3>
+        <button class="icon-btn" data-close>×</button>
+      </div>
+      <div class="modal-body">
+        <p>确定删除选中的 <strong id="delete-confirm-count">0</strong> 个邮箱？删除后无法恢复。</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-close>取消</button>
+        <button class="btn btn-danger" id="delete-confirm-submit">确认删除</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="refresh-token-modal">
+    <div class="modal modal-narrow">
+      <div class="modal-header">
+        <h3>批量刷新 Token</h3>
+        <button class="icon-btn" data-close>×</button>
+      </div>
+      <div class="modal-body">
+        <p>将刷新 <strong id="refresh-token-count">0</strong> 个邮箱的 Refresh Token。</p>
+        <p class="hint">已勾选邮箱时只刷新勾选项；未勾选时刷新当前分组/搜索结果。</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-close>取消</button>
+        <button class="btn btn-primary" id="refresh-token-confirm">确认刷新</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay mail-modal" id="mail-modal">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h3 id="mail-modal-title"></h3>
+        <button class="icon-btn" data-close>×</button>
+      </div>
+      <div class="modal-body">
+        <div class="mail-meta">
+          <p><strong>发件人：</strong><span id="mail-modal-sender"></span></p>
+          <p><strong>日期：</strong><span id="mail-modal-date"></span></p>
+        </div>
+        <div class="mail-content" id="mail-modal-content"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay ai-modal" id="ai-modal">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h3>AI 解读</h3>
+        <button class="icon-btn" id="ai-close">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="ai-analysis-card">
+          <div class="ai-status" id="ai-status">正在连接 AI 解读服务...</div>
+          <div class="ai-thinking" id="ai-thinking"></div>
+          <div class="ai-summary ai-cursor" id="ai-summary">准备生成摘要...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/mail.js"></script>
+</body>
+</html>
