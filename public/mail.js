@@ -6,6 +6,7 @@
     GROUP_KEY: 'emailGroups',
     PASSWORD_KEY: 'password',
     MAIL_LIMIT_KEY: 'mailLimit',
+    SIDEBAR_WIDTH_KEY: 'mailSidebarWidth',
     ACCESS_SESSION_KEY: 'mailAccessGranted',
     ACCESS_SESSION_VERSION: '2',
     ACCESS_USERNAME_KEY: 'mailAccessUsername',
@@ -226,6 +227,77 @@
     }
 
     showToast(`${label}已复制`)
+  }
+
+  const initSidebarResizer = () => {
+    const shell = $('.app-shell')
+    const sidebar = $('.sidebar')
+    const resizer = $('#sidebar-resizer')
+    if (!shell || !sidebar || !resizer) return
+
+    const desktopQuery = window.matchMedia('(min-width: 1101px)')
+    const minWidth = 260
+    const getMaxWidth = () => Math.max(minWidth, Math.min(520, Math.floor(window.innerWidth * 0.42)))
+    const clampWidth = width => Math.min(getMaxWidth(), Math.max(minWidth, Math.round(width)))
+    const setWidth = (width, persist = true) => {
+      const next = clampWidth(width)
+      shell.style.setProperty('--sidebar-width', `${next}px`)
+      resizer.setAttribute('aria-valuemin', String(minWidth))
+      resizer.setAttribute('aria-valuemax', String(getMaxWidth()))
+      resizer.setAttribute('aria-valuenow', String(next))
+      if (persist) localStorage.setItem(CONFIG.SIDEBAR_WIDTH_KEY, String(next))
+    }
+    const restoreSavedWidth = () => {
+      const saved = Number(localStorage.getItem(CONFIG.SIDEBAR_WIDTH_KEY))
+      if (desktopQuery.matches && Number.isFinite(saved) && saved > 0) setWidth(saved, false)
+    }
+
+    restoreSavedWidth()
+
+    resizer.addEventListener('pointerdown', event => {
+      if (!desktopQuery.matches || event.button !== 0) return
+      event.preventDefault()
+      resizer.setPointerCapture(event.pointerId)
+      document.body.classList.add('sidebar-resizing')
+
+      const onMove = moveEvent => setWidth(moveEvent.clientX, false)
+      const onEnd = endEvent => {
+        resizer.releasePointerCapture(endEvent.pointerId)
+        resizer.removeEventListener('pointermove', onMove)
+        resizer.removeEventListener('pointerup', onEnd)
+        resizer.removeEventListener('pointercancel', onEnd)
+        document.body.classList.remove('sidebar-resizing')
+        localStorage.setItem(CONFIG.SIDEBAR_WIDTH_KEY, String(Math.round(sidebar.getBoundingClientRect().width)))
+      }
+
+      resizer.addEventListener('pointermove', onMove)
+      resizer.addEventListener('pointerup', onEnd)
+      resizer.addEventListener('pointercancel', onEnd)
+    })
+
+    resizer.addEventListener('dblclick', () => {
+      localStorage.removeItem(CONFIG.SIDEBAR_WIDTH_KEY)
+      shell.style.removeProperty('--sidebar-width')
+      resizer.removeAttribute('aria-valuenow')
+    })
+
+    resizer.addEventListener('keydown', event => {
+      if (!desktopQuery.matches) return
+      const current = sidebar.getBoundingClientRect().width
+      if (event.key === 'ArrowLeft') setWidth(current - 16)
+      else if (event.key === 'ArrowRight') setWidth(current + 16)
+      else if (event.key === 'Home') {
+        localStorage.removeItem(CONFIG.SIDEBAR_WIDTH_KEY)
+        shell.style.removeProperty('--sidebar-width')
+      } else return
+      event.preventDefault()
+    })
+
+    window.addEventListener('resize', () => {
+      if (!desktopQuery.matches) return
+      const saved = Number(localStorage.getItem(CONFIG.SIDEBAR_WIDTH_KEY))
+      if (Number.isFinite(saved) && saved > 0) setWidth(saved, false)
+    })
   }
 
   const normalizeItem = (item) => ({
@@ -690,8 +762,10 @@
         return r.json()
       })
       .then(d => {
-        const limit = Number(localStorage.getItem(CONFIG.MAIL_LIMIT_KEY) || '2')
-        state.mailData = Array.isArray(d) ? d.slice(0, limit) : []
+        const limitSetting = localStorage.getItem(CONFIG.MAIL_LIMIT_KEY) || '2'
+        const allMail = Array.isArray(d) ? d : []
+        const limit = Number(limitSetting) || 2
+        state.mailData = limitSetting === 'all' ? allMail : allMail.slice(0, limit)
         showMailSection()
         renderMailTable()
       })
@@ -972,6 +1046,7 @@
   const init = async () => {
     migrateLegacyAccessCredentials()
     initAccessGate()
+    initSidebarResizer()
     await loadStoreState()
     normalizeStorage()
     refreshGroupControls()
