@@ -7,6 +7,8 @@
     PASSWORD_KEY: 'password',
     MAIL_LIMIT_KEY: 'mailLimit',
     SIDEBAR_WIDTH_KEY: 'mailSidebarWidth',
+    TABLE_COLUMNS_KEY: 'mailTableColumnWidths',
+    TABLE_SIZE_KEY: 'mailTablePanelSize',
     ACCESS_SESSION_KEY: 'mailAccessGranted',
     ACCESS_SESSION_VERSION: '2',
     ACCESS_USERNAME_KEY: 'mailAccessUsername',
@@ -300,6 +302,194 @@
     })
   }
 
+  const initEmailTableResizing = () => {
+    const table = $('#email-table')
+    const card = $('#email-table-card')
+    const panelResizer = $('#table-size-resizer')
+    const headers = $$('thead th', table)
+    const columns = $$('col', table)
+    if (!table || !card || !panelResizer || headers.length !== columns.length) return
+
+    const desktopQuery = window.matchMedia('(min-width: 1101px)')
+    const columnMinimums = [54, 68, 140, 120, 100, 130, 220]
+    const normalizeColumnWidths = widths => widths.map((width, index) => {
+      const value = Number(width)
+      return Math.min(640, Math.max(columnMinimums[index] || 80, Number.isFinite(value) ? value : columnMinimums[index]))
+    })
+    const applyColumnWidths = (widths, persist = true) => {
+      const next = normalizeColumnWidths(widths)
+      columns.forEach((column, index) => { column.style.width = `${Math.round(next[index])}px` })
+      const total = Math.round(next.reduce((sum, width) => sum + width, 0))
+      table.style.width = `${total}px`
+      table.style.minWidth = `${total}px`
+      if (persist) localStorage.setItem(CONFIG.TABLE_COLUMNS_KEY, JSON.stringify(next.map(Math.round)))
+    }
+    const resetColumnWidths = () => {
+      localStorage.removeItem(CONFIG.TABLE_COLUMNS_KEY)
+      columns.forEach(column => { column.style.width = '' })
+      table.style.width = ''
+      table.style.minWidth = ''
+    }
+    const readSavedColumns = () => {
+      try {
+        const saved = JSON.parse(localStorage.getItem(CONFIG.TABLE_COLUMNS_KEY) || 'null')
+        if (Array.isArray(saved) && saved.length === columns.length) applyColumnWidths(saved, false)
+      } catch (error) {
+        localStorage.removeItem(CONFIG.TABLE_COLUMNS_KEY)
+      }
+    }
+
+    headers.forEach((header, index) => {
+      const handle = document.createElement('span')
+      handle.className = 'column-resizer'
+      handle.tabIndex = 0
+      handle.setAttribute('role', 'separator')
+      handle.setAttribute('aria-orientation', 'vertical')
+      handle.setAttribute('aria-label', `调整第 ${index + 1} 列宽度`)
+      handle.title = '拖拽调整列宽，双击恢复全部列宽'
+      header.appendChild(handle)
+
+      handle.addEventListener('pointerdown', event => {
+        if (!desktopQuery.matches || event.button !== 0) return
+        event.preventDefault()
+        event.stopPropagation()
+        const startX = event.clientX
+        const startWidths = headers.map(item => item.getBoundingClientRect().width)
+        handle.setPointerCapture(event.pointerId)
+        handle.classList.add('active')
+        document.body.classList.add('table-column-resizing')
+        applyColumnWidths(startWidths, false)
+
+        const onMove = moveEvent => {
+          const next = [...startWidths]
+          next[index] = startWidths[index] + moveEvent.clientX - startX
+          applyColumnWidths(next, false)
+          handle.setAttribute('aria-valuenow', String(Math.round(normalizeColumnWidths(next)[index])))
+        }
+        const onEnd = endEvent => {
+          if (handle.hasPointerCapture(endEvent.pointerId)) handle.releasePointerCapture(endEvent.pointerId)
+          handle.removeEventListener('pointermove', onMove)
+          handle.removeEventListener('pointerup', onEnd)
+          handle.removeEventListener('pointercancel', onEnd)
+          handle.classList.remove('active')
+          document.body.classList.remove('table-column-resizing')
+          const current = columns.map(column => parseFloat(column.style.width) || 0)
+          localStorage.setItem(CONFIG.TABLE_COLUMNS_KEY, JSON.stringify(current.map(Math.round)))
+        }
+
+        handle.addEventListener('pointermove', onMove)
+        handle.addEventListener('pointerup', onEnd)
+        handle.addEventListener('pointercancel', onEnd)
+      })
+
+      handle.addEventListener('dblclick', event => {
+        event.preventDefault()
+        event.stopPropagation()
+        resetColumnWidths()
+      })
+
+      handle.addEventListener('keydown', event => {
+        if (!desktopQuery.matches) return
+        if (event.key === 'Home') {
+          resetColumnWidths()
+        } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+          const widths = headers.map(item => item.getBoundingClientRect().width)
+          widths[index] += event.key === 'ArrowLeft' ? -12 : 12
+          applyColumnWidths(widths)
+        } else return
+        event.preventDefault()
+      })
+    })
+
+    const getPanelLimits = () => {
+      const section = $('#account-section')
+      const top = card.getBoundingClientRect().top
+      return {
+        maxWidth: Math.max(620, section.clientWidth - 32),
+        maxHeight: Math.max(340, window.innerHeight - top - 16)
+      }
+    }
+    const applyPanelSize = (width, height, persist = true) => {
+      const limits = getPanelLimits()
+      const next = {
+        width: Math.round(Math.min(limits.maxWidth, Math.max(620, Number(width) || 620))),
+        height: Math.round(Math.min(limits.maxHeight, Math.max(340, Number(height) || 340)))
+      }
+      card.style.width = `${next.width}px`
+      card.style.height = `${next.height}px`
+      card.style.flex = '0 0 auto'
+      card.style.marginRight = 'auto'
+      panelResizer.setAttribute('aria-valuenow', `${next.width} × ${next.height}`)
+      if (persist) localStorage.setItem(CONFIG.TABLE_SIZE_KEY, JSON.stringify(next))
+    }
+    const resetPanelSize = () => {
+      localStorage.removeItem(CONFIG.TABLE_SIZE_KEY)
+      card.style.width = ''
+      card.style.height = ''
+      card.style.flex = ''
+      card.style.marginRight = ''
+      panelResizer.removeAttribute('aria-valuenow')
+    }
+    const restorePanelSize = () => {
+      if (!desktopQuery.matches) return
+      try {
+        const saved = JSON.parse(localStorage.getItem(CONFIG.TABLE_SIZE_KEY) || 'null')
+        if (saved?.width && saved?.height) applyPanelSize(saved.width, saved.height, false)
+      } catch (error) {
+        localStorage.removeItem(CONFIG.TABLE_SIZE_KEY)
+      }
+    }
+
+    panelResizer.addEventListener('pointerdown', event => {
+      if (!desktopQuery.matches || event.button !== 0) return
+      event.preventDefault()
+      const startX = event.clientX
+      const startY = event.clientY
+      const rect = card.getBoundingClientRect()
+      panelResizer.setPointerCapture(event.pointerId)
+      document.body.classList.add('table-panel-resizing')
+
+      const onMove = moveEvent => applyPanelSize(
+        rect.width + moveEvent.clientX - startX,
+        rect.height + moveEvent.clientY - startY,
+        false
+      )
+      const onEnd = endEvent => {
+        if (panelResizer.hasPointerCapture(endEvent.pointerId)) panelResizer.releasePointerCapture(endEvent.pointerId)
+        panelResizer.removeEventListener('pointermove', onMove)
+        panelResizer.removeEventListener('pointerup', onEnd)
+        panelResizer.removeEventListener('pointercancel', onEnd)
+        document.body.classList.remove('table-panel-resizing')
+        const current = card.getBoundingClientRect()
+        localStorage.setItem(CONFIG.TABLE_SIZE_KEY, JSON.stringify({
+          width: Math.round(current.width),
+          height: Math.round(current.height)
+        }))
+      }
+
+      panelResizer.addEventListener('pointermove', onMove)
+      panelResizer.addEventListener('pointerup', onEnd)
+      panelResizer.addEventListener('pointercancel', onEnd)
+    })
+
+    panelResizer.addEventListener('dblclick', resetPanelSize)
+    panelResizer.addEventListener('keydown', event => {
+      if (!desktopQuery.matches) return
+      const rect = card.getBoundingClientRect()
+      if (event.key === 'Home') resetPanelSize()
+      else if (event.key === 'ArrowLeft') applyPanelSize(rect.width - 16, rect.height)
+      else if (event.key === 'ArrowRight') applyPanelSize(rect.width + 16, rect.height)
+      else if (event.key === 'ArrowUp') applyPanelSize(rect.width, rect.height - 16)
+      else if (event.key === 'ArrowDown') applyPanelSize(rect.width, rect.height + 16)
+      else return
+      event.preventDefault()
+    })
+
+    window.addEventListener('resize', restorePanelSize)
+    readSavedColumns()
+    restorePanelSize()
+  }
+
   const normalizeItem = (item) => ({
     email: item.email || '',
     password: item.password || '',
@@ -512,6 +702,73 @@
     reader.readAsText(file)
   }
 
+  const downloadTxt = (lines, fileName) => {
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = fileName
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  const parseFilterEmails = (text) => {
+    const emails = String(text || '')
+      .split(/[\s,，;；]+/)
+      .map(value => value.split('----')[0].trim().toLowerCase())
+      .filter(value => value && value.includes('@'))
+    return [...new Set(emails)]
+  }
+
+  const updateFilterExportSummary = () => {
+    const count = parseFilterEmails($('#filter-export-emails').value).length
+    $('#filter-export-summary').textContent = `已输入 ${count} 个邮箱`
+  }
+
+  const openFilterExportModal = () => {
+    if (!getEmailData().length) return showToast('暂无可筛选的邮箱数据')
+    $('#filter-export-emails').value = ''
+    updateFilterExportSummary()
+    openModal('filter-export-modal')
+    $('#filter-export-emails').focus()
+  }
+
+  const exportFilteredEmails = () => {
+    const requestedEmails = parseFilterEmails($('#filter-export-emails').value)
+    if (!requestedEmails.length) return showToast('请输入要筛选的邮箱地址')
+
+    const dataByEmail = getEmailData().map(normalizeItem).reduce((map, item) => {
+      const key = item.email.trim().toLowerCase()
+      if (!map.has(key)) map.set(key, [])
+      map.get(key).push(item)
+      return map
+    }, new Map())
+    const matched = []
+    let missingCount = 0
+
+    requestedEmails.forEach(email => {
+      const items = dataByEmail.get(email)
+      if (items?.length) matched.push(...items)
+      else missingCount++
+    })
+
+    if (!matched.length) return showToast(`未匹配到邮箱，共 ${missingCount} 个未找到`)
+
+    const lines = matched.map(item => [
+      item.email,
+      item.password,
+      item.clientId,
+      item.refreshToken
+    ].join('----'))
+    downloadTxt(lines, `filtered-emails-${new Date().toISOString().slice(0, 10)}.txt`)
+    closeAllModals()
+    showToast(missingCount
+      ? `已导出 ${matched.length} 条，${missingCount} 个邮箱未找到`
+      : `已导出 ${matched.length} 条邮箱数据`)
+  }
+
   const exportData = () => {
     const selectedGroup = $('#group-filter')?.value || state.groupFilter || 'all'
     const allData = getEmailData().map(normalizeItem)
@@ -525,14 +782,8 @@
     }
 
     const lines = data.map(item => [item.email, item.password, item.clientId, item.refreshToken, item.group, item.note].join('----'))
-    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
     const groupName = selectedGroup === 'all' ? 'all' : selectedGroup.replace(/[\\/:*?"<>|]/g, '_')
-    a.download = `emails-${groupName}-${new Date().toISOString().slice(0, 10)}.txt`
-    a.click()
-    URL.revokeObjectURL(url)
+    downloadTxt(lines, `emails-${groupName}-${new Date().toISOString().slice(0, 10)}.txt`)
     showToast(selectedGroup === 'all' ? `已导出全部 ${data.length} 条` : `已导出 ${selectedGroup} 分组 ${data.length} 条`)
   }
 
@@ -730,13 +981,16 @@
     state.mailData = []
   }
 
-  const loadMailList = (mail, mailbox) => {
+  const loadMailList = (mail, mailbox, notify = false) => {
     if (!mail.refreshToken || !mail.clientId) {
       showToast('该邮箱缺少 Client ID 或 Refresh Token')
       return
     }
 
     showLoading()
+    const refreshButton = $('#mail-refresh-btn')
+    refreshButton.disabled = true
+    refreshButton.classList.add('is-loading')
     state.currentMailAccount = mail
     state.currentMailbox = mailbox
     state.currentMailPage = 1
@@ -753,7 +1007,7 @@
       password: getPassword()
     })
 
-    fetch(`${CONFIG.API_BASE}?${params.toString()}`)
+    return fetch(`${CONFIG.API_BASE}?${params.toString()}`, { cache: 'no-store' })
       .then(r => {
         if (!r.ok) {
           if (r.status === 401) throw new Error(AUTH_ERROR_MESSAGE)
@@ -768,9 +1022,14 @@
         state.mailData = limitSetting === 'all' ? allMail : allMail.slice(0, limit)
         showMailSection()
         renderMailTable()
+        if (notify) showToast(`刷新完成，共获取 ${state.mailData.length} 封邮件`)
       })
       .catch(err => showToast(err.message || '加载失败'))
-      .finally(hideLoading)
+      .finally(() => {
+        hideLoading()
+        refreshButton.disabled = false
+        refreshButton.classList.remove('is-loading')
+      })
   }
 
   const renderMailTable = () => {
@@ -963,6 +1222,10 @@
       closeAllModals()
     })
 
+    $('#filter-export-btn').addEventListener('click', openFilterExportModal)
+    $('#filter-export-emails').addEventListener('input', updateFilterExportSummary)
+    $('#filter-export-confirm').addEventListener('click', exportFilteredEmails)
+
     $('#clear-all-btn').addEventListener('click', () => {
       const total = getEmailData().length
       if (!total) return showToast('暂无可清空邮箱')
@@ -1004,6 +1267,10 @@
     $('#mailbox-switch').addEventListener('change', e => {
       if (!state.currentMailAccount) return
       loadMailList(state.currentMailAccount, e.target.value)
+    })
+    $('#mail-refresh-btn').addEventListener('click', () => {
+      if (!state.currentMailAccount) return showToast('请先选择邮箱')
+      loadMailList(state.currentMailAccount, $('#mailbox-switch').value, true)
     })
     $('#mail-table tbody').addEventListener('click', e => {
       const btn = e.target.closest('button[data-action]')
@@ -1047,6 +1314,7 @@
     migrateLegacyAccessCredentials()
     initAccessGate()
     initSidebarResizer()
+    initEmailTableResizing()
     await loadStoreState()
     normalizeStorage()
     refreshGroupControls()

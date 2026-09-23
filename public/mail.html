@@ -65,6 +65,8 @@
 
       <section class="side-section">
         <h2>数据管理</h2>
+        <button class="btn btn-primary-soft sidebar-btn" id="filter-export-btn">筛选邮箱导出</button>
+
         <label class="field">
           <span>默认获取数量</span>
           <select id="mail-limit">
@@ -121,9 +123,12 @@
           </div>
         </header>
 
-        <div class="table-card">
+        <div class="table-card email-table-card" id="email-table-card">
           <div class="table-wrap">
             <table class="table" id="email-table">
+              <colgroup id="email-table-columns">
+                <col><col><col><col><col><col><col>
+              </colgroup>
               <thead>
                 <tr>
                   <th class="check-col"><input type="checkbox" id="select-all"></th>
@@ -149,6 +154,14 @@
             </select>
             <div class="pagination" id="pagination-btns"></div>
           </footer>
+          <div
+            class="table-size-resizer"
+            id="table-size-resizer"
+            role="separator"
+            aria-label="调整邮箱列表宽高"
+            tabindex="0"
+            title="拖拽调整表格宽高，双击恢复自动尺寸"
+          ></div>
         </div>
       </section>
 
@@ -163,6 +176,10 @@
                 <option value="INBOX">收件箱</option>
                 <option value="Junk">垃圾邮箱</option>
               </select>
+              <button class="btn mail-refresh-btn" id="mail-refresh-btn" type="button" title="重新获取当前邮箱的邮件">
+                <span class="refresh-icon" aria-hidden="true">↻</span>
+                <span>刷新</span>
+              </button>
             </div>
           </div>
         </header>
@@ -202,6 +219,24 @@
       <div class="modal-footer">
         <button class="btn" data-close>取消</button>
         <button class="btn btn-primary" id="paste-import-confirm">导入</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="filter-export-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>筛选邮箱导出</h3>
+        <button class="icon-btn" data-close>×</button>
+      </div>
+      <div class="modal-body">
+        <p class="hint">批量输入邮箱地址，支持换行、空格、逗号或分号分隔；也可以直接粘贴包含“----”的原始数据行。</p>
+        <textarea id="filter-export-emails" rows="12" placeholder="user1@outlook.com&#10;user2@outlook.com"></textarea>
+        <p class="hint filter-export-summary" id="filter-export-summary">已输入 0 个邮箱</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" data-close>取消</button>
+        <button class="btn btn-primary" id="filter-export-confirm">导出 TXT</button>
       </div>
     </div>
   </div>
