@@ -727,11 +727,13 @@ input[type="checkbox"] {
 
 .pagination-wrap {
   flex-shrink: 0;
+  min-width: 0;
   padding-top: 20px;
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   align-items: center;
-  gap: 20px;
+  gap: 12px;
   color: var(--muted);
 }
 
@@ -741,7 +743,20 @@ input[type="checkbox"] {
 
 .pagination {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  max-width: 100%;
   gap: 8px;
+}
+
+.pagination-ellipsis {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 40px;
 }
 
 .pagination button {
@@ -1469,6 +1484,8 @@ input[type="checkbox"] {
   .pagination {
     width: 100%;
     overflow-x: auto;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
     padding-bottom: 2px;
   }
 

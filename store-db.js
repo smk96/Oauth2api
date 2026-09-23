@@ -34,6 +34,33 @@ db.exec(`
 
 db.prepare('INSERT OR IGNORE INTO groups (name) VALUES (?)').run('默认分组');
 
+const duplicateCount = db.prepare(`
+  SELECT COALESCE(SUM(total - 1), 0) AS count
+  FROM (
+    SELECT COUNT(*) AS total FROM emails
+    GROUP BY lower(trim(email)), password, group_name
+    HAVING total > 1
+  )
+`).get().count;
+
+if (duplicateCount) {
+    const backupPath = `${dbPath}.pre-dedupe-${new Date().toISOString().replace(/[:.]/g, '-')}-${process.pid}.db`;
+    db.prepare('VACUUM INTO ?').run(backupPath);
+    console.log(`Backed up ${duplicateCount} duplicate email rows to ${backupPath}`);
+}
+
+db.transaction(() => {
+    if (duplicateCount) {
+        db.exec(`
+          DELETE FROM emails WHERE id NOT IN (
+            SELECT MIN(id) FROM emails
+            GROUP BY lower(trim(email)), password, group_name
+          )
+        `);
+    }
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_emails_identity ON emails(lower(trim(email)), password, group_name)');
+})();
+
 const normalizeItem = (item = {}) => ({
     id: item.id ?? null,
     email: item.email || '',
@@ -69,9 +96,13 @@ const replaceEmailsTx = db.transaction((items) => {
       VALUES (@email, @password, @clientId, @refreshToken, @group, @note, CURRENT_TIMESTAMP)
     `);
     const insertGroup = db.prepare('INSERT OR IGNORE INTO groups (name) VALUES (?)');
+    const seen = new Set();
     for (const raw of items || []) {
         const item = normalizeItem(raw);
         if (!item.email) continue;
+        const key = JSON.stringify([item.email.trim().toLowerCase(), item.password, item.group]);
+        if (seen.has(key)) continue;
+        seen.add(key);
         insertGroup.run(item.group);
         insertEmail.run(item);
     }

@@ -5,6 +5,7 @@
   "scripts": {
     "start": "node vps.js",
     "dev": "node vps.js",
+    "test": "node --test tests/store-db.test.cjs",
     "vercel:dev": "vercel dev"
   },
   "engines": {

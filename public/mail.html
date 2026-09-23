@@ -230,9 +230,9 @@
         <button class="icon-btn" data-close>×</button>
       </div>
       <div class="modal-body">
-        <p class="hint">批量输入邮箱地址，支持换行、空格、逗号或分号分隔；也可以直接粘贴包含“----”的原始数据行。</p>
+        <p class="hint">直接粘贴混合文本即可。系统会自动提取邮箱、忽略“母号✅”“❌”等尾部文字，并按邮箱地址去重。</p>
         <textarea id="filter-export-emails" rows="12" placeholder="user1@outlook.com&#10;user2@outlook.com"></textarea>
-        <p class="hint filter-export-summary" id="filter-export-summary">已输入 0 个邮箱</p>
+        <p class="hint filter-export-summary" id="filter-export-summary">已识别 0 个邮箱，可导出 0 条，未找到 0 个</p>
       </div>
       <div class="modal-footer">
         <button class="btn" data-close>取消</button>

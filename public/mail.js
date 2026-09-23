@@ -499,6 +499,18 @@
     note: item.note || ''
   })
 
+  const emailRecordKey = item => JSON.stringify([item.email.trim().toLowerCase(), item.password, item.group])
+
+  const deduplicateEmailItems = items => {
+    const seen = new Set()
+    return items.filter(item => {
+      const key = emailRecordKey(item)
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+  }
+
   const loadStoreState = async () => {
     try {
       const response = await fetch(CONFIG.STORE_STATE_API, { cache: 'no-store' })
@@ -530,9 +542,14 @@
 
   const normalizeStorage = () => {
     const data = getEmailData().map(normalizeItem)
-    setEmailData(data)
     const groups = new Set(getGroups())
     data.forEach(item => groups.add(item.group || CONFIG.DEFAULT_GROUP))
+    if (state.storeMode === 'server') {
+      state.emailData = data
+      state.groups = [...groups]
+      return
+    }
+    setEmailData(deduplicateEmailItems(data))
     setGroups([...groups])
   }
 
@@ -574,6 +591,7 @@
   const renderTable = () => {
     const tbody = $('#email-table tbody')
     const filtered = getFilteredData()
+    state.currentPage = Math.min(state.currentPage, Math.max(1, Math.ceil(filtered.length / state.itemsPerPage)))
     const start = (state.currentPage - 1) * state.itemsPerPage
     const pageData = filtered.slice(start, start + state.itemsPerPage)
 
@@ -629,24 +647,35 @@
     selectAll.indeterminate = selected.length > 0 && selected.length < indexes.length
   }
 
-  const renderPagination = () => {
-    const total = getFilteredData().length
-    const totalPages = Math.max(1, Math.ceil(total / state.itemsPerPage))
-    if (state.currentPage > totalPages) state.currentPage = totalPages
-
-    $('#pagination-info').textContent = `共 ${total} 条`
-
+  const renderPageButtons = (container, currentPage, totalPages) => {
     if (totalPages <= 1) {
-      $('#pagination-btns').innerHTML = ''
+      container.innerHTML = ''
       return
     }
 
-    let html = `<button ${state.currentPage === 1 ? 'disabled' : ''} data-page="${state.currentPage - 1}">‹</button>`
-    for (let i = 1; i <= totalPages; i++) {
-      html += `<button class="${i === state.currentPage ? 'active' : ''}" data-page="${i}">${i}</button>`
+    const pageButton = page => `<button type="button" class="${page === currentPage ? 'active' : ''}" data-page="${page}" aria-label="第 ${page} 页" ${page === currentPage ? 'aria-current="page"' : ''}>${page}</button>`
+    const visiblePages = new Set([1, totalPages])
+    for (let page = Math.max(1, currentPage - 1); page <= Math.min(totalPages, currentPage + 1); page++) {
+      visiblePages.add(page)
     }
-    html += `<button ${state.currentPage === totalPages ? 'disabled' : ''} data-page="${state.currentPage + 1}">›</button>`
-    $('#pagination-btns').innerHTML = html
+
+    let html = `<button type="button" ${currentPage === 1 ? 'disabled' : ''} data-page="${currentPage - 1}" aria-label="上一页">‹</button>`
+    let previousPage = 0
+    for (const page of [...visiblePages].sort((a, b) => a - b)) {
+      if (previousPage && page - previousPage === 2) html += pageButton(previousPage + 1)
+      else if (previousPage && page - previousPage > 2) html += '<span class="pagination-ellipsis" aria-hidden="true">…</span>'
+      html += pageButton(page)
+      previousPage = page
+    }
+    html += `<button type="button" ${currentPage === totalPages ? 'disabled' : ''} data-page="${currentPage + 1}" aria-label="下一页">›</button>`
+    container.innerHTML = html
+  }
+
+  const renderPagination = () => {
+    const total = getFilteredData().length
+    const totalPages = Math.max(1, Math.ceil(total / state.itemsPerPage))
+    $('#pagination-info').textContent = `共 ${total} 条`
+    renderPageButtons($('#pagination-btns'), state.currentPage, totalPages)
   }
 
   const parseImportText = (text, delimiter, group) => {
@@ -683,13 +712,23 @@
       return
     }
     const data = getEmailData().map(normalizeItem)
-    data.push(...items)
+    const existing = new Set(data.map(emailRecordKey))
+    const added = []
+    for (const item of items) {
+      const key = emailRecordKey(item)
+      if (existing.has(key)) continue
+      existing.add(key)
+      added.push(item)
+    }
+    const skipped = items.length - added.length
+    if (!added.length) return showToast(`没有新增邮箱，跳过 ${skipped} 条重复记录`)
+    data.push(...added)
     setEmailData(data)
-    setGroups([...new Set([...getGroups(), ...items.map(item => item.group)])])
+    setGroups([...new Set([...getGroups(), ...added.map(item => item.group)])])
     refreshGroupControls()
     state.currentPage = 1
     renderTable()
-    showToast(`导入成功，共 ${items.length} 条`)
+    showToast(`新增 ${added.length} 条${skipped ? `，跳过 ${skipped} 条重复记录` : ''}`)
   }
 
   const importFromFile = (file) => {
@@ -714,17 +753,37 @@
     URL.revokeObjectURL(url)
   }
 
-  const parseFilterEmails = (text) => {
-    const emails = String(text || '')
-      .split(/[\s,，;；]+/)
-      .map(value => value.split('----')[0].trim().toLowerCase())
-      .filter(value => value && value.includes('@'))
-    return [...new Set(emails)]
+  const getFilterEmailStats = (text) => {
+    const matches = String(text || '').match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi) || []
+    const normalized = matches.map(email => email.toLowerCase())
+    const emails = [...new Set(normalized)]
+    return { emails, total: normalized.length, duplicateCount: normalized.length - emails.length }
+  }
+
+  const parseFilterEmails = text => getFilterEmailStats(text).emails
+
+  const matchFilteredEmails = (requestedEmails) => {
+    const dataByEmail = new Map()
+    getEmailData().forEach(item => {
+      const normalized = normalizeItem(item)
+      const key = normalized.email.trim().toLowerCase()
+      if (key && !dataByEmail.has(key)) dataByEmail.set(key, normalized)
+    })
+
+    const matched = []
+    const missingEmails = []
+    requestedEmails.forEach(email => {
+      const item = dataByEmail.get(email)
+      if (item) matched.push(item)
+      else missingEmails.push(email)
+    })
+    return { matched, missingEmails }
   }
 
   const updateFilterExportSummary = () => {
-    const count = parseFilterEmails($('#filter-export-emails').value).length
-    $('#filter-export-summary').textContent = `已输入 ${count} 个邮箱`
+    const stats = getFilterEmailStats($('#filter-export-emails').value)
+    const { matched, missingEmails } = matchFilteredEmails(stats.emails)
+    $('#filter-export-summary').textContent = `已识别 ${stats.emails.length} 个邮箱，可导出 ${matched.length} 条，未找到 ${missingEmails.length} 个${stats.duplicateCount ? `，去重 ${stats.duplicateCount} 个` : ''}`
   }
 
   const openFilterExportModal = () => {
@@ -739,22 +798,7 @@
     const requestedEmails = parseFilterEmails($('#filter-export-emails').value)
     if (!requestedEmails.length) return showToast('请输入要筛选的邮箱地址')
 
-    const dataByEmail = getEmailData().map(normalizeItem).reduce((map, item) => {
-      const key = item.email.trim().toLowerCase()
-      if (!map.has(key)) map.set(key, [])
-      map.get(key).push(item)
-      return map
-    }, new Map())
-    const matched = []
-    let missingCount = 0
-
-    requestedEmails.forEach(email => {
-      const items = dataByEmail.get(email)
-      if (items?.length) matched.push(...items)
-      else missingCount++
-    })
-
-    if (!matched.length) return showToast(`未匹配到邮箱，共 ${missingCount} 个未找到`)
+    const { matched, missingEmails } = matchFilteredEmails(requestedEmails)
 
     const lines = matched.map(item => [
       item.email,
@@ -762,10 +806,15 @@
       item.clientId,
       item.refreshToken
     ].join('----'))
-    downloadTxt(lines, `filtered-emails-${new Date().toISOString().slice(0, 10)}.txt`)
+    if (missingEmails.length) {
+      if (lines.length) lines.push('', '-------------------')
+      lines.push(`未找到 ${missingEmails.length} 个邮箱：`, ...missingEmails)
+    }
+    const missingLabel = missingEmails.length ? `-未找到${missingEmails.length}个` : ''
+    downloadTxt(lines, `filtered-emails-${matched.length}条${missingLabel}-${new Date().toISOString().slice(0, 10)}.txt`)
     closeAllModals()
-    showToast(missingCount
-      ? `已导出 ${matched.length} 条，${missingCount} 个邮箱未找到`
+    showToast(missingEmails.length
+      ? `已导出 ${matched.length} 条，${missingEmails.length} 个未找到的邮箱已附在 TXT 末尾`
       : `已导出 ${matched.length} 条邮箱数据`)
   }
 
@@ -783,7 +832,7 @@
 
     const lines = data.map(item => [item.email, item.password, item.clientId, item.refreshToken, item.group, item.note].join('----'))
     const groupName = selectedGroup === 'all' ? 'all' : selectedGroup.replace(/[\\/:*?"<>|]/g, '_')
-    downloadTxt(lines, `emails-${groupName}-${new Date().toISOString().slice(0, 10)}.txt`)
+    downloadTxt(lines, `emails-${groupName}-${lines.length}条-${new Date().toISOString().slice(0, 10)}.txt`)
     showToast(selectedGroup === 'all' ? `已导出全部 ${data.length} 条` : `已导出 ${selectedGroup} 分组 ${data.length} 条`)
   }
 
@@ -1034,6 +1083,7 @@
 
   const renderMailTable = () => {
     const tbody = $('#mail-table tbody')
+    state.currentMailPage = Math.min(state.currentMailPage, Math.max(1, Math.ceil(state.mailData.length / CONFIG.MAIL_ITEMS_PER_PAGE)))
     const start = (state.currentMailPage - 1) * CONFIG.MAIL_ITEMS_PER_PAGE
     const pageData = state.mailData.slice(start, start + CONFIG.MAIL_ITEMS_PER_PAGE)
 
@@ -1061,14 +1111,7 @@
 
   const renderMailPagination = () => {
     const totalPages = Math.ceil(state.mailData.length / CONFIG.MAIL_ITEMS_PER_PAGE)
-    if (totalPages <= 1) {
-      $('#mail-pagination-btns').innerHTML = ''
-      return
-    }
-    let html = `<button ${state.currentMailPage === 1 ? 'disabled' : ''} data-page="${state.currentMailPage - 1}">‹</button>`
-    for (let i = 1; i <= totalPages; i++) html += `<button class="${i === state.currentMailPage ? 'active' : ''}" data-page="${i}">${i}</button>`
-    html += `<button ${state.currentMailPage === totalPages ? 'disabled' : ''} data-page="${state.currentMailPage + 1}">›</button>`
-    $('#mail-pagination-btns').innerHTML = html
+    renderPageButtons($('#mail-pagination-btns'), state.currentMailPage, totalPages)
   }
 
   const viewMailDetail = (index) => {
